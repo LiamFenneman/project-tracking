@@ -1,12 +1,19 @@
 use anyhow::Context;
 use askama::Template;
-use axum::{response::IntoResponse, routing::get, Router};
+use axum::{extract::State, response::IntoResponse, routing::get, Router};
 use tower_http::services::ServeDir;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+#[derive(Clone, Debug)]
+pub struct AppState {
+    pub pool: sqlx::MySqlPool,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    dotenvy::dotenv().context("error while loading .env")?;
+
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -23,11 +30,20 @@ async fn main() -> anyhow::Result<()> {
         .expect("could not find current working dir")
         .join("public");
 
-    let api_router = Router::new().route("/hello", get(hello_sv));
+    let pool = sqlx::MySqlPool::connect(
+        &std::env::var("DATABASE_URL").context("DATABASE_URL not set")?,
+    )
+    .await
+    .context("error while connecting to database")?;
+
+    let api_router = Router::new()
+        .route("/hello", get(hello_sv))
+        .route("/db", get(db_example));
     let router = Router::new()
         .route("/", get(hello))
         .nest("/api", api_router)
-        .nest_service("/public", ServeDir::new(public_path));
+        .nest_service("/public", ServeDir::new(public_path))
+        .with_state(AppState { pool });
 
     info!("router initialized, now listening on port {}", port);
 
@@ -45,6 +61,27 @@ async fn hello() -> impl IntoResponse {
 
 async fn hello_sv() -> impl IntoResponse {
     "Hello, world!"
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+struct ExampleRow {
+    id: i32,
+    name: String,
+    age: i32,
+    email: String,
+}
+
+async fn db_example(State(state): State<AppState>) -> impl IntoResponse {
+    let rows = sqlx::query_as!(ExampleRow, "SELECT * FROM example_table")
+        .fetch_all(&state.pool)
+        .await
+        .unwrap();
+
+    rows.into_iter()
+        .map(|row| format!("{:?}", row))
+        .collect::<Vec<String>>()
+        .join("\n")
 }
 
 #[derive(Template)]

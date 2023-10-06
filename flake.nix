@@ -24,7 +24,10 @@
         nativeBuildInputs = with pkgs; [
           rustToolchain
           pkg-config
+          openssl
           nodePackages.pnpm
+          pscale
+          mysql80
         ];
 
         # Runtime dependencies
