@@ -1,9 +1,16 @@
 use anyhow::Context;
 use askama::Template;
-use axum::{extract::State, response::IntoResponse, routing::get, Router};
-use tower_http::services::ServeDir;
+use axum::{response::IntoResponse, routing::get, Router};
+use tower::ServiceBuilder;
+use tower_http::{
+    compression::CompressionLayer, services::ServeDir, trace::TraceLayer,
+};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+mod org;
+mod project;
+mod task;
 
 #[derive(Clone, Debug)]
 pub struct AppState {
@@ -17,15 +24,22 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "warn,project_tracking_app=debug".into()),
+                .unwrap_or_else(|_| {
+                    "warn,tower_http=trace,project_tracking_app=debug".into()
+                }),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
     info!("initializing router...");
 
-    let port = 3000_u16;
-    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
+    let host = option_env!("HOST")
+        .and_then(|port| port.parse().ok())
+        .unwrap_or_else(|| std::net::Ipv4Addr::new(0, 0, 0, 0));
+    let port = option_env!("PORT")
+        .and_then(|port| port.parse().ok())
+        .unwrap_or(3000);
+    let addr = std::net::SocketAddr::from((host, port));
     let public_path = std::env::current_dir()
         .expect("could not find current working dir")
         .join("public");
@@ -36,13 +50,37 @@ async fn main() -> anyhow::Result<()> {
     .await
     .context("error while connecting to database")?;
 
-    let api_router = Router::new()
-        .route("/hello", get(hello_sv))
-        .route("/db", get(db_example));
     let router = Router::new()
-        .route("/", get(hello))
-        .nest("/api", api_router)
+        .route("/", get(home))
+        .route("/orgs", get(org::all_orgs))
+        .nest(
+            "/:org",
+            Router::new()
+                .route("/", get(org::org_by_id))
+                .route("/projects", get(project::all_projects))
+                .nest(
+                    "/:project",
+                    Router::new()
+                        .route("/", get(project::project_by_id))
+                        .route("/tasks", get(task::all_tasks))
+                        .nest(
+                            "/:task_id",
+                            Router::new().route("/", get(task::task_by_id)),
+                        ),
+                ),
+        )
         .nest_service("/public", ServeDir::new(public_path))
+        .layer(
+            ServiceBuilder::new()
+                .layer(
+                    TraceLayer::new_for_http().on_response(
+                        tower_http::trace::DefaultOnResponse::new()
+                            .level(tracing::Level::INFO)
+                            .latency_unit(tower_http::LatencyUnit::Millis),
+                    ),
+                )
+                .layer(CompressionLayer::new()),
+        )
         .with_state(AppState { pool });
 
     info!("router initialized, now listening on port {}", port);
@@ -55,35 +93,10 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn hello() -> impl IntoResponse {
-    HelloTemplate
-}
-
-async fn hello_sv() -> impl IntoResponse {
-    "Hello, world!"
-}
-
-#[allow(dead_code)]
-#[derive(Clone, Debug)]
-struct ExampleRow {
-    id: i32,
-    name: String,
-    age: i32,
-    email: String,
-}
-
-async fn db_example(State(state): State<AppState>) -> impl IntoResponse {
-    let rows = sqlx::query_as!(ExampleRow, "SELECT * FROM example_table")
-        .fetch_all(&state.pool)
-        .await
-        .unwrap();
-
-    rows.into_iter()
-        .map(|row| format!("{:?}", row))
-        .collect::<Vec<String>>()
-        .join("\n")
-}
-
 #[derive(Template)]
 #[template(path = "index.html")]
-struct HelloTemplate;
+struct HomePage;
+
+async fn home() -> impl IntoResponse {
+    HomePage
+}

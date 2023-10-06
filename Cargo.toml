@@ -12,6 +12,6 @@ dotenvy = "0.15.7"
 sqlx = { version = "0.7.2", features = [ "runtime-tokio", "tls-native-tls", "mysql" ] }
 tokio = { version = "1.32.0", features = ["full"] }
 tower = "0.4.13"
-tower-http = { version = "0.4.4", features = ["fs"] }
-tracing = "0.1.37"
+tower-http = { version = "0.4.4", features = ["fs", "compression-full", "trace"] }
+tracing = { version = "0.1.37", features = ["attributes"] }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }

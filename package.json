@@ -3,7 +3,7 @@
     "version": "1.0.0",
     "scripts": {
         "fmt": "prettier --write --ignore-unknown .",
-        "build": "pnpm dlx tailwindcss -i styles/tailwind.css -o public/main.css",
+        "build": "pnpm dlx tailwindcss -i styles/tailwind.css -o public/main.css --minify",
         "watch": "pnpm dlx tailwindcss -i styles/tailwind.css -o public/main.css --watch"
     },
     "author": "Liam Fenneman",
