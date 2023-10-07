@@ -1,6 +1,6 @@
 use anyhow::Context;
 use askama::Template;
-use axum::{response::IntoResponse, routing::get, Router};
+use axum::{routing::get, Router};
 use tower::ServiceBuilder;
 use tower_http::{
     compression::CompressionLayer, services::ServeDir, trace::TraceLayer,
@@ -8,6 +8,7 @@ use tower_http::{
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod login;
 mod org;
 mod project;
 mod task;
@@ -16,6 +17,10 @@ mod task;
 pub struct AppState {
     pub pool: sqlx::MySqlPool,
 }
+
+#[derive(Template)]
+#[template(path = "index.html")]
+struct HomePage;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -51,13 +56,15 @@ async fn main() -> anyhow::Result<()> {
     .context("error while connecting to database")?;
 
     let router = Router::new()
-        .route("/", get(home))
-        .route("/orgs", get(org::all_orgs))
+        .route("/", get(|| async { HomePage }))
+        .route("/projects", get(project::all_projects))
+        .route("/organisations", get(org::all_orgs))
+        .merge(login::router())
         .nest(
             "/:org",
             Router::new()
                 .route("/", get(org::org_by_id))
-                .route("/projects", get(project::all_projects))
+                .route("/projects", get(project::projects_by_org))
                 .nest(
                     "/:project",
                     Router::new()
@@ -91,12 +98,4 @@ async fn main() -> anyhow::Result<()> {
         .context("error while starting server")?;
 
     Ok(())
-}
-
-#[derive(Template)]
-#[template(path = "index.html")]
-struct HomePage;
-
-async fn home() -> impl IntoResponse {
-    HomePage
 }

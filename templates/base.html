@@ -1,3 +1,5 @@
+{% import "macros.html" as macros %}
+
 <!doctype html>
 <html lang="en">
     <head>
@@ -13,7 +15,17 @@
         ></script>
         {% block head %}{% endblock %}
     </head>
-    <body>
+    <body class="bg-neutral-700">
+        <nav class="flex justify-between px-4 gap-4 bg-neutral-900 text-white">
+            <div class="flex justify-left">
+                {% call macros::nav_link("/", "Home") %}
+                {% call macros::nav_link("/projects", "Projects") %}
+                {% call macros::nav_link("/organisations", "Organisations") %}
+            </div>
+            <div class="flex justify-right">
+                {% call macros::nav_link("/login", "Login") %}
+            </div>
+        </nav>
         {% block content %}{% endblock %}
     </body>
 </html>

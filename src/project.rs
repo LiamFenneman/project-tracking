@@ -21,13 +21,20 @@ pub async fn all_projects(
     let rows = sqlx::query_as!(Project, "SELECT * FROM `project`")
         .fetch_all(&pool)
         .await
-        .expect("failed to fetch projects");
+        .expect("");
     info!("rows: {:?}", rows);
 
     rows.into_iter()
         .map(|row| format!("{:?}", row))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+#[instrument(level=Level::DEBUG)]
+pub async fn projects_by_org(
+    Path(org): Path<String>,
+) -> impl IntoResponse {
+    org
 }
 
 #[instrument(level=Level::DEBUG)]
